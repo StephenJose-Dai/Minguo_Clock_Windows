@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 民国纪年 Windows 版：WPF 界面 + 托盘 + 桌面小组件 + 屏幕保护程序 + 锁屏背景 -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- 带 Windows SDK 版本号，才能用 Windows 定位、锁屏图片等系统接口 -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- WPF 和 WinForms 有很多同名类型，关掉隐式 using，每个文件自己写 -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>MinguoCalendar</AssemblyName>
+    <RootNamespace>MinguoCalendar</RootNamespace>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>民国纪年</Product>
+    <Company>StephenJose_Dai</Company>
+    <Copyright>© StephenJose_Dai</Copyright>
+    <Version>1.0.0</Version>
+    <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <SatelliteResourceLanguages>zh-Hans;zh-Hant</SatelliteResourceLanguages>
+    <!-- 只在 Windows 上运行，不需要的平台兼容警告关掉 -->
+    <NoWarn>$(NoWarn);CA1416;WFAC010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Minguo.Core\Minguo.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Fonts\*.ttf" />
+    <Resource Include="Assets\app.png" />
+    <!-- 许可文件放在 exe 旁边（不打进单文件），方便查看 -->
+    <None Include="Licenses\*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+</Project>

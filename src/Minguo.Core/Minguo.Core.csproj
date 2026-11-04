@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 核心逻辑：民国/农历日期、天气、定位、名言、必应壁纸、设置。不依赖 Windows 界面，可在任何平台编译测试。 -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Minguo.Core</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data\cn_districts.tsv" LogicalName="cn_districts.tsv" />
+    <EmbeddedResource Include="Data\quotes.txt" LogicalName="quotes.txt" />
+  </ItemGroup>
+</Project>
