@@ -35,7 +35,7 @@ internal sealed record SysStat
 internal sealed record DiskStat(string Name, double Percent, double UsedGB, double TotalGB);
 
 /// <summary>一条 TCP 连接：进程、本地地址、远程地址、状态</summary>
-internal sealed record ConnInfo(int Pid, string Process, string Local, string Remote, string State);
+public sealed record ConnInfo(int Pid, string Process, string Local, string Remote, string State);
 
 /// <summary>
 /// 系统资源采集（CPU、内存、磁盘、温度、网速、开机时长）。

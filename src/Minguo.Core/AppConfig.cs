@@ -7,7 +7,7 @@ public static class AppConfig
 
     /// <summary>“关于”页的 GitHub、Telegram 地址：没填时显示“未设置”</summary>
     public const string GitHubUrl = "https://github.com/StephenJose-Dai/Minguo_Clock_Windows";   // 例如 https://github.com/你的用户名/仓库名
-    public const string TelegramUrl = "https://t.me/StephenJose"; // 例如 https://t.me/你的用户名或频道名
+    public const string TelegramUrl = "https://t.me/+bmFk2CWSOGM0OWFl"; // 例如 https://t.me/你的用户名或频道名
 
     /// <summary>
     /// 天气接口（公共接口）：所有用户共用这个 Key 的调用次数，所以有频率限制。
