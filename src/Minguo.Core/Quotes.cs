@@ -53,24 +53,38 @@ public static class Quotes
             await NextAsync().ConfigureAwait(false);
     }
 
-    /// <summary>立刻换一句：一半概率取一言（失败就用内置）</summary>
-    public static async Task NextAsync()
+    /// <summary>
+    /// 准备下一句：一半概率取一言（失败就用内置），只返回，不改当前显示。
+    /// 和天气、壁纸一起准备好后再由 Commit 同时切换。
+    /// </summary>
+    public static async Task<string> PickNextAsync()
     {
         await Gate.WaitAsync().ConfigureAwait(false);
         try
         {
             string? q = null;
             if (Rng.NextDouble() < 0.5) q = await FetchHitokotoAsync().ConfigureAwait(false);
-            q ??= NextBuiltin();
-            var s = SettingsStore.Current;
-            s.QuoteText = q;
-            s.QuoteChangedAt = DateTime.Now;
-            SettingsStore.Save();
+            return q ?? NextBuiltin();
         }
         finally
         {
             Gate.Release();
         }
+    }
+
+    /// <summary>切换到准备好的那句（只改内存，不保存、不发通知）</summary>
+    public static void Commit(string q)
+    {
+        var s = SettingsStore.Current;
+        s.QuoteText = q;
+        s.QuoteChangedAt = DateTime.Now;
+    }
+
+    /// <summary>立刻换一句（单独换名言时用）</summary>
+    public static async Task NextAsync()
+    {
+        Commit(await PickNextAsync().ConfigureAwait(false));
+        SettingsStore.Save();
         Changed?.Invoke();
     }
 

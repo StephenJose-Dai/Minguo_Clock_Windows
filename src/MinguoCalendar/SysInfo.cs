@@ -250,10 +250,13 @@ internal static class SysInfo
 
     // ---------------- 温度 ----------------
 
+    private static PerformanceCounter? _tzCounter;
+
     private static double? ReadTemp()
     {
         // 查询较慢，约每 6 秒更新一次
         if (_tick++ % 4 != 0 && Current != null) return _temp;
+        // 1) WMI 的 ACPI 热区
         try
         {
             using var searcher = new ManagementObjectSearcher("root\\WMI", "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature");
@@ -264,13 +267,42 @@ internal static class SysInfo
                 var c = raw / 10.0 - 273.15;
                 if (c is > -20 and < 125 && c > max) max = c;
             }
-            _temp = max > double.MinValue ? Math.Round(max, 1) : null;
+            if (max > double.MinValue) return _temp = Math.Round(max, 1);
         }
         catch
         {
-            _temp = null; // 机器不支持
+            // 换下一种
         }
-        return _temp;
+        // 2) 性能计数器“Thermal Zone Information”（有些机器 WMI 不行但这个有）
+        try
+        {
+            _tzCounter ??= FirstThermalZone();
+            if (_tzCounter != null)
+            {
+                var k = _tzCounter.NextValue();              // 开尔文
+                var c = (k > 200 ? k : k * 10) - 273.15;     // 个别机器按十分之开尔文给
+                if (c is > -20 and < 125) return _temp = Math.Round(c, 1);
+            }
+        }
+        catch
+        {
+            _tzCounter = null;
+        }
+        return _temp = null; // 这台机器没把温度暴露给系统
+    }
+
+    private static PerformanceCounter? FirstThermalZone()
+    {
+        try
+        {
+            var cat = new PerformanceCounterCategory("Thermal Zone Information");
+            var inst = cat.GetInstanceNames();
+            return inst.Length > 0 ? new PerformanceCounter("Thermal Zone Information", "Temperature", inst[0]) : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // ---------------- 磁盘读写速度（PerformanceCounter，全机） ----------------

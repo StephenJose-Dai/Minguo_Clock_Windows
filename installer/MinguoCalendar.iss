@@ -88,9 +88,15 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   Scr: String;
+  Code: Integer;
+  Exe: String;
 begin
   if CurUninstallStep = usUninstall then
   begin
+    // 先让程序把锁屏背景恢复成系统默认（只有它接管过才会动），再删文件
+    Exe := ExpandConstant('{app}\MinguoCalendar.exe');
+    if FileExists(Exe) then
+      Exec(Exe, '--restore-lockscreen', '', SW_HIDE, ewWaitUntilTerminated, Code);
     KillApp();
     // 开机自启
     RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'MinguoCalendar');
@@ -101,6 +107,8 @@ begin
         RegDeleteValue(HKCU, 'Control Panel\Desktop', 'SCRNSAVE.EXE');
         RegWriteStringValue(HKCU, 'Control Panel\Desktop', 'ScreenSaveActive', '0');
       end;
-    DeleteFile(ExpandConstant('{localappdata}\MinguoCalendar\MinguoCalendar.scr'));
+    // 卸载干净：删掉设置和缓存（屏保文件、必应图、锁屏图、日志）
+    DelTree(ExpandConstant('{localappdata}\MinguoCalendar'), True, True, True);
+    DelTree(ExpandConstant('{userappdata}\MinguoCalendar'), True, True, True);
   end;
 end;

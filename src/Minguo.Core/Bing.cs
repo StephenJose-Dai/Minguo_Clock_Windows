@@ -58,12 +58,12 @@ public static partial class Bing
         return new[] { preferred, "https://cn.bing.com", "https://www.bing.com" }.Distinct().ToArray();
     }
 
-    /// <summary>图片列表（urlbase），每天拉一次；拉不到就用旧列表</summary>
-    private static async Task<List<string>> EnsureListAsync()
+    /// <summary>图片列表（urlbase），每天拉一次；拉不到就用旧列表。只返回，不写入设置（写入在 Commit 里和换图一起做）</summary>
+    private static async Task<(List<string> List, string Date)> LoadListAsync()
     {
         var s = SettingsStore.Current;
         var today = DateTime.Today.ToString("yyyy-MM-dd");
-        if (s.BingListDate == today && s.BingList.Count > 0) return s.BingList;
+        if (s.BingListDate == today && s.BingList.Count > 0) return (s.BingList, s.BingListDate);
         var mkt = await Region.BingMarketAsync().ConfigureAwait(false);
         foreach (var host in await HostsAsync().ConfigureAwait(false))
         {
@@ -85,18 +85,9 @@ public static partial class Bing
                     // 试下一个
                 }
             }
-            if (list.Count > 0)
-            {
-                s.BingList = list;
-                s.BingListDate = today;
-                var keep = list.Select(CacheName).ToHashSet();
-                foreach (var f in Directory.GetFiles(CacheDir))
-                    if (!keep.Contains(Path.GetFileName(f))) { try { File.Delete(f); } catch { /* 忽略 */ } }
-                SettingsStore.Save();
-                return list;
-            }
+            if (list.Count > 0) return (list, today);
         }
-        return s.BingList;
+        return (s.BingList, s.BingListDate);
     }
 
     /// <summary>取图片文件：有缓存直接用，没有就按屏幕尺寸下载</summary>
@@ -128,35 +119,77 @@ public static partial class Bing
         return null;
     }
 
-    /// <summary>立刻换下一张</summary>
-    public static async Task<bool> RotateAsync()
+    /// <summary>准备好的下一张：新列表 + 要显示的序号（图片已下载到缓存）</summary>
+    public sealed record Next(List<string> List, string Date, int Index);
+
+    /// <summary>
+    /// 准备下一张：拉列表、下载图片，但不改当前显示（设置里的 BingIndex 不动）。
+    /// 和天气、名言一起准备好后再由 Commit 同时切换，避免先后跳。
+    /// </summary>
+    public static async Task<Next?> PrepareNextAsync()
     {
         await Gate.WaitAsync().ConfigureAwait(false);
         try
         {
             var s = SettingsStore.Current;
-            var list = await EnsureListAsync().ConfigureAwait(false);
-            if (list.Count == 0) return false;
-            var start = ((s.BingIndex + 1) % list.Count + list.Count) % list.Count;
+            var (list, date) = await LoadListAsync().ConfigureAwait(false);
+            if (list.Count == 0) return null;
+            // 从“当前这张”在新列表里的位置往后找（列表每天会变，按图片本身找）
+            var cur = s.BingIndex >= 0 && s.BingIndex < s.BingList.Count ? s.BingList[s.BingIndex] : null;
+            var pos = cur == null ? -1 : list.IndexOf(cur);
+            var start = pos < 0 ? 0 : (pos + 1) % list.Count;
             for (var k = 0; k < list.Count; k++)
             {
                 var idx = (start + k) % list.Count;
-                var f = await ImageFileAsync(list[idx]).ConfigureAwait(false);
-                if (f == null) continue;
-                s.BingIndex = idx;
-                s.BingChangedAt = DateTime.Now;
-                SettingsStore.Save();
-                // 预下载下一张，下次切换不用等网络
-                _ = ImageFileAsync(list[(idx + 1) % list.Count]);
-                Changed?.Invoke();
-                return true;
+                if (await ImageFileAsync(list[idx]).ConfigureAwait(false) != null) return new Next(list, date, idx);
             }
-            return false;
+            return null;
         }
         finally
         {
             Gate.Release();
         }
+    }
+
+    /// <summary>切换到准备好的那张（只改内存，不保存、不发通知；由调用方统一保存、统一刷新）</summary>
+    public static void Commit(Next n)
+    {
+        var s = SettingsStore.Current;
+        s.BingList = n.List;
+        s.BingListDate = n.Date;
+        s.BingIndex = n.Index;
+        s.BingChangedAt = DateTime.Now;
+    }
+
+    /// <summary>切换之后：删掉不在列表里的旧图，预下载下一张（下次切换不用等网络）</summary>
+    public static void AfterCommit()
+    {
+        var s = SettingsStore.Current;
+        var list = s.BingList;
+        if (list.Count == 0) return;
+        try
+        {
+            var keep = list.Select(CacheName).ToHashSet();
+            foreach (var f in Directory.GetFiles(CacheDir))
+                if (!keep.Contains(Path.GetFileName(f))) { try { File.Delete(f); } catch { /* 正在用就留着 */ } }
+        }
+        catch
+        {
+            // 忽略
+        }
+        if (s.BingIndex >= 0) _ = ImageFileAsync(list[(s.BingIndex + 1) % list.Count]);
+    }
+
+    /// <summary>立刻换下一张（单独换壁纸时用）</summary>
+    public static async Task<bool> RotateAsync()
+    {
+        var n = await PrepareNextAsync().ConfigureAwait(false);
+        if (n == null) return false;
+        Commit(n);
+        SettingsStore.Save();
+        AfterCommit();
+        Changed?.Invoke();
+        return true;
     }
 
     /// <summary>没有图就下一张；满 30 分钟就换；force = 立刻换</summary>

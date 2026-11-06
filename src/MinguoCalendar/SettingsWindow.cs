@@ -238,9 +238,9 @@ public sealed class SettingsWindow : Window
         var style = S.Style;
         var buttons = new List<UIElement>
         {
-            Ui.Btn(L.Tr("换一句", "換一句"), () => App.Fire(Quotes.NextAsync), accent: true),
+            Ui.Btn(L.Tr("换一句", "換一句"), () => Scheduler.Manual(Quotes.NextAsync), accent: true),
         };
-        if (S.WallpaperMode == 2) buttons.Add(Ui.Btn(L.Tr("换一张壁纸", "換一張桌布"), () => App.Fire(() => Bing.RotateAsync())));
+        if (S.WallpaperMode == 2) buttons.Add(Ui.Btn(L.Tr("换一张壁纸", "換一張桌布"), () => Scheduler.Manual(() => Bing.RotateAsync())));
         buttons.Add(Ui.Btn(L.Tr("全屏预览", "全螢幕預覽"), ScreenSaver.Preview));
 
         return Page(Roc.DateLine(now, style) + "  " + Roc.Weekday(now), Roc.LunarLine(now, style),
@@ -254,12 +254,12 @@ public sealed class SettingsWindow : Window
                     S.LockImageEnabled, SetLockImage),
                 Ui.SwitchRow(L.Tr("屏幕保护程序", "螢幕保護程式"), L.Tr("电脑闲置时全屏显示民国时钟", "電腦閒置時全螢幕顯示民國時鐘"),
                     S.ScreensaverInstalled && ScreenSaver.IsActive(), SetScreenSaver),
-                Ui.SwitchRow(L.Tr("天气", "天氣"), L.Tr("自动定位，每 30 分钟更新", "自動定位，每 30 分鐘更新"),
+                Ui.SwitchRow(L.Tr("天气", "天氣"), L.Tr($"自动定位，每 {S.WeatherInterval} 分钟更新", $"自動定位，每 {S.WeatherInterval} 分鐘更新"),
                     S.WeatherEnabled, v =>
                     {
                         S.WeatherEnabled = v;
                         Save();
-                        if (v) App.Fire(() => WeatherService.RefreshAsync());
+                        if (v) Scheduler.Manual(() => WeatherService.RefreshAsync());
                     })));
     }
 
@@ -268,6 +268,7 @@ public sealed class SettingsWindow : Window
         S.LockImageEnabled = on;
         Save();
         if (on) UpdateLockImage();
+        else App.Fire(LockImage.RestoreDefaultAsync); // 关掉就把锁屏恢复默认，不要冻在那张图
     }
 
     private void UpdateLockImage()
@@ -389,17 +390,19 @@ public sealed class SettingsWindow : Window
                     Save();
                 }),
                 Ui.SwitchRow(L.Tr("显示天气", "顯示天氣"), null, S.WidgetShowWeather, v => { S.WidgetShowWeather = v; Save(); }),
-                Ui.SwitchRow(L.Tr("显示名言", "顯示名言"), L.Tr("每 30 分钟换一句，点一下也能换", "每 30 分鐘換一句，點一下也能換"), S.WidgetShowQuote, v => { S.WidgetShowQuote = v; Save(); }),
-                Ui.SwitchRow(L.Tr("锁定位置和大小", "鎖定位置和大小"), L.Tr("锁定后不能拖动，也不显示虚线框", "鎖定後不能拖曳，也不顯示虛線框"), S.WidgetLocked, v => { S.WidgetLocked = v; Save(); }),
-                Ui.Buttons(Ui.Btn(L.Tr("恢复默认位置和大小", "恢復預設位置和大小"), () =>
-                {
-                    if (App.Instance.Widget is { } w) w.ResetBounds();
-                    else { S.WidgetX = double.NaN; S.WidgetY = double.NaN; S.WidgetWidth = 420; S.WidgetHeight = 300; Save(); }
-                }))),
+                Ui.SwitchRow(L.Tr("显示名言", "顯示名言"), L.Tr($"每 {S.RotateInterval} 分钟换一句，点一下也能换", $"每 {S.RotateInterval} 分鐘換一句，點一下也能換"), S.WidgetShowQuote, v => { S.WidgetShowQuote = v; Save(); }),
+                Ui.SwitchRow(L.Tr("锁定位置和大小", "鎖定位置和大小"), L.Tr("锁定后不能拖动、不显示虚线框，右键也不弹菜单", "鎖定後不能拖曳、不顯示虛線框，右鍵也不彈選單"), S.WidgetLocked, v => { S.WidgetLocked = v; Save(); }),
+                Ui.Buttons(
+                    Ui.Btn(L.Tr("换一句", "換一句"), () => Scheduler.Manual(Quotes.NextAsync)),
+                    Ui.Btn(L.Tr("恢复默认位置和大小", "恢復預設位置和大小"), () =>
+                    {
+                        if (App.Instance.Widget is { } w) w.ResetBounds();
+                        else { S.WidgetX = double.NaN; S.WidgetY = double.NaN; S.WidgetWidth = 420; S.WidgetHeight = 300; Save(); }
+                    }))),
             Ui.Section(L.Tr("怎么调整", "怎麼調整"),
                 Ui.Para(L.Tr(
-                    "鼠标移到组件上会出现虚线框：按住拖动移动，拖四边或四角调整大小。右键可锁定、换一句、切换文字颜色、隐藏。按 Win + D 显示桌面时组件仍在。",
-                    "滑鼠移到組件上會出現虛線框：按住拖曳移動，拖四邊或四角調整大小。右鍵可鎖定、換一句、切換文字顏色、隱藏。按 Win + D 顯示桌面時組件仍在。"))));
+                    "未锁定时：鼠标移到组件上会出现虚线框，按住拖动移动，拖四边或四角调整大小；右键有快捷菜单。锁定后组件不响应拖动和右键，所有选项都在这一页设置。按 Win + D 显示桌面时组件仍在。",
+                    "未鎖定時：滑鼠移到組件上會出現虛線框，按住拖曳移動，拖四邊或四角調整大小；右鍵有快捷選單。鎖定後組件不回應拖曳和右鍵，所有選項都在這一頁設定。按 Win + D 顯示桌面時組件仍在。"))));
     }
 
     private StackPanel SysPage()
@@ -433,7 +436,7 @@ public sealed class SettingsWindow : Window
                     S.SysWidgetTextStyle = i;
                     Save();
                 }),
-                Ui.SwitchRow(L.Tr("锁定位置和大小", "鎖定位置和大小"), null, S.SysWidgetLocked, v => { S.SysWidgetLocked = v; Save(); }),
+                Ui.SwitchRow(L.Tr("锁定位置和大小", "鎖定位置和大小"), L.Tr("锁定后不能拖动、不显示虚线框，右键也不弹菜单", "鎖定後不能拖曳、不顯示虛線框，右鍵也不彈選單"), S.SysWidgetLocked, v => { S.SysWidgetLocked = v; Save(); }),
                 Ui.Buttons(
                     Ui.Btn(L.Tr("连接详情…", "連線詳情…"), ConnectionsWindow.ShowSingleton),
                     Ui.Btn(L.Tr("恢复默认位置和大小", "恢復預設位置和大小"), () =>
@@ -483,7 +486,7 @@ public sealed class SettingsWindow : Window
         return Page(L.Tr("锁屏背景", "鎖定畫面背景"), null,
             Ui.Section(L.Tr("锁屏背景", "鎖定畫面背景"),
                 Ui.SwitchRow(L.Tr("自动更新锁屏背景", "自動更新鎖定畫面背景"),
-                    L.Tr("每 30 分钟把壁纸、民国日期、农历、天气、名言画成一张图，设为锁屏图片", "每 30 分鐘把桌布、民國日期、農曆、天氣、名言畫成一張圖，設為鎖定畫面圖片"),
+                    L.Tr("把壁纸、民国日期、农历、天气、名言画成一张图设为锁屏图片；天气、名言、壁纸一更新就同时重画", "把桌布、民國日期、農曆、天氣、名言畫成一張圖設為鎖定畫面圖片；天氣、名言、桌布一更新就同時重畫"),
                     S.LockImageEnabled, SetLockImage),
                 Ui.Buttons(
                     Ui.Btn(L.Tr("立即更新", "立即更新"), UpdateLockImage, accent: true),
@@ -556,7 +559,7 @@ public sealed class SettingsWindow : Window
     {
         var f = Bing.CurrentFile;
         if (f == null) return L.Tr("正在获取必应壁纸…（需要联网）", "正在取得 Bing 桌布…（需要連網）");
-        return L.Tr("上次更换：", "上次更換：") + Ago(S.BingChangedAt) + L.Tr("，每 30 分钟自动换一张", "，每 30 分鐘自動換一張");
+        return L.Tr("上次更换：", "上次更換：") + Ago(S.BingChangedAt) + L.Tr($"，每 {S.RotateInterval} 分钟自动换一张", $"，每 {S.RotateInterval} 分鐘自動換一張");
     }
 
     private StackPanel WallpaperPage()
@@ -571,7 +574,7 @@ public sealed class SettingsWindow : Window
             {
                 S.WallpaperMode = i;
                 Save();
-                if (i == 2) App.Fire(() => Bing.RefreshAsync());
+                if (i == 2) Scheduler.Manual(() => Bing.RefreshAsync());
                 BuildPage();
             }),
         };
@@ -631,11 +634,16 @@ public sealed class SettingsWindow : Window
                 mode.Add(Ui.Buttons(Ui.Btn(L.Tr("换一张", "換一張"), () =>
                 {
                     if (_bingStatus != null) _bingStatus.Text = L.Tr("正在下载…", "正在下載…");
-                    App.Fire(() => Bing.RotateAsync());
+                    Scheduler.Manual(() => Bing.RotateAsync());
                 }, accent: true)));
                 break;
         }
         items.Add(Ui.Section(L.Tr("壁纸来源", "桌布來源"), mode.ToArray()));
+        items.Add(Ui.Section(L.Tr("名言和壁纸多久换一次", "名言和桌布多久換一次"),
+            IntervalChoice([10, 15, 30, 60], S.RotateInterval, m => S.RotateInterval = m),
+            Ui.Para(L.Tr(
+                "按整点对齐准时更换，名言、壁纸、天气、锁屏图在同一瞬间一起换。天气另外按“天气”页的频率更新。",
+                "按整點對齊準時更換，名言、桌布、天氣、鎖定畫面圖在同一瞬間一起換。天氣另外按「天氣」頁的頻率更新。"))));
 
         int[] dims = [0, 15, 25, 40, 55, 70];
         var di = Array.IndexOf(dims, S.WallpaperDim);
@@ -734,19 +742,24 @@ public sealed class SettingsWindow : Window
 
         return Page(L.Tr("天气", "天氣"), null,
             Ui.Section(L.Tr("天气", "天氣"),
-                Ui.SwitchRow(L.Tr("显示天气", "顯示天氣"), L.Tr("每 30 分钟更新一次", "每 30 分鐘更新一次"), S.WeatherEnabled, v =>
+                Ui.SwitchRow(L.Tr("显示天气", "顯示天氣"), L.Tr($"每 {S.WeatherInterval} 分钟更新一次，可在下面调整", $"每 {S.WeatherInterval} 分鐘更新一次，可在下面調整"), S.WeatherEnabled, v =>
                 {
                     S.WeatherEnabled = v;
                     Save();
-                    if (v) App.Fire(() => WeatherService.RefreshAsync());
+                    if (v) Scheduler.Manual(() => WeatherService.RefreshAsync());
                 }),
                 Ui.SwitchRow(L.Tr("自动定位", "自動定位"), L.Tr("用 Windows 定位服务（Wi‑Fi / GPS），拿不到时按网络大致定位", "用 Windows 定位服務（Wi‑Fi / GPS），拿不到時按網路大致定位"), S.AutoLocate, v =>
                 {
                     S.AutoLocate = v;
                     if (v) S.LocatedAt = default;
                     Save();
-                    if (v) App.Fire(() => WeatherService.RefreshAsync());
-                })),
+                    if (v) Scheduler.Manual(() => WeatherService.RefreshAsync());
+                }),
+                Ui.Text(L.Tr("更新频率", "更新頻率"), 14),
+                IntervalChoice([5, 10, 15, 30], S.WeatherInterval, m => S.WeatherInterval = m),
+                Ui.Para(L.Tr(
+                    "按整点对齐（比如 10 分钟就是 :00、:10、:20…）准时更新，锁屏图同时重画。天气数据源本身大约 10~15 分钟出一次新数据，选 5 分钟能保证源头一更新最多晚 5 分钟看到。",
+                    "按整點對齊（例如 10 分鐘就是 :00、:10、:20…）準時更新，鎖定畫面圖同時重畫。天氣資料來源本身大約 10~15 分鐘出一次新資料，選 5 分鐘能保證來源一更新最多晚 5 分鐘看到。"))),
             Ui.Section(L.Tr("位置", "位置"),
                 _locationHost,
                 Ui.Buttons(locateBtn, Ui.Btn(L.Tr("选择区县…", "選擇區縣…"), PickDistrict), Ui.Btn(L.Tr("搜索城市…", "搜尋城市…"), SearchCity)),
@@ -754,11 +767,7 @@ public sealed class SettingsWindow : Window
                 deniedHint),
             Ui.Section(L.Tr("当前天气", "目前天氣"),
                 _weatherHost,
-                Ui.Buttons(Ui.Btn(L.Tr("刷新", "重新整理"), () => App.Fire(async () =>
-                {
-                    if (S.WeatherCache != null) S.WeatherCache = S.WeatherCache with { FetchedAt = default };
-                    await WeatherService.RefreshAsync().ConfigureAwait(false);
-                })))),
+                Ui.Buttons(Ui.Btn(L.Tr("刷新", "重新整理"), () => Scheduler.Manual(() => WeatherService.RefreshAsync())))),
             Ui.Section(L.Tr("天气接口", "天氣介面"),
                 Ui.Para(L.Tr("用于把定位坐标换成所在的区县，填了自己的 Key 后优先使用。", "用於把定位座標換成所在的區縣，填了自己的 Key 後優先使用。")),
                 apiStatus,
@@ -778,7 +787,7 @@ public sealed class SettingsWindow : Window
                         apiStatus.Text = ApiStatusText(nowOwn);
                         apiStatus.SetResourceReference(TextBlock.ForegroundProperty, nowOwn ? "GoodBrush" : "SubBrush");
                         testResult.Text = L.Tr("已保存", "已儲存");
-                        App.Fire(() => WeatherService.RefreshAsync());
+                        Scheduler.Manual(() => WeatherService.RefreshAsync());
                     }, accent: true),
                     testBtn,
                     Ui.Btn(L.Tr("清空", "清除"), () =>
@@ -788,6 +797,20 @@ public sealed class SettingsWindow : Window
                         url.Text = AppConfig.ApiUrl;
                     })),
                 testResult));
+    }
+
+    /// <summary>“每几分钟”选项：改完立刻按新频率对准整点（到点就一起更新）</summary>
+    private WrapPanel IntervalChoice(int[] minutes, int current, Action<int> set)
+    {
+        var idx = Array.IndexOf(minutes, current);
+        if (idx < 0) idx = 0;
+        return Ui.Choice(minutes.Select(m => m == 60 ? L.Tr("1 小时", "1 小時") : L.Tr($"{m} 分钟", $"{m} 分鐘")).ToList(), idx, i =>
+        {
+            set(minutes[i]);
+            Save();
+            Scheduler.Tick(false); // 按新频率重新对准整点；跨了时段就马上整批更新一次
+            BuildPage();           // 说明文字里的分钟数跟着变
+        });
     }
 
     private static string ApiStatusText(bool own)
@@ -942,9 +965,8 @@ public sealed class SettingsWindow : Window
                     WeatherService.SetLocation(district.Place.Label, district.Lat, district.Lon, district.Place);
                     S.LocSource = "manual";
                     S.LocatedAt = DateTime.Now;
-                    S.WeatherCache = null;
                     Save();
-                    App.Fire(() => WeatherService.RefreshAsync());
+                    Scheduler.Manual(() => WeatherService.RefreshAsync());
                     dlg.Close();
                     BuildPage();
                 }));
@@ -1042,9 +1064,8 @@ public sealed class SettingsWindow : Window
                         WeatherService.SetLocation(place.Label.Length > 0 ? place.Label : city.Name, city.Lat, city.Lon, place);
                         S.LocSource = "manual";
                         S.LocatedAt = DateTime.Now;
-                        S.WeatherCache = null;
                         Save();
-                        App.Fire(() => WeatherService.RefreshAsync());
+                        Scheduler.Manual(() => WeatherService.RefreshAsync());
                         dlg.Close();
                         BuildPage();
                     };
@@ -1120,7 +1141,8 @@ public sealed class SettingsWindow : Window
             return b;
         }
 
-        var copyright = Ui.Text($"© {DateTime.Now.Year} {AppConfig.Author}", 12.5, "SubBrush");
+        // 民国元年（1912）到今年，年份随系统时间自动变化
+        var copyright = Ui.Text($"© 1912-{DateTime.Now.Year} {AppConfig.Author}", 12.5, "SubBrush");
         copyright.HorizontalAlignment = HorizontalAlignment.Center;
         copyright.Margin = new Thickness(0, 10, 0, 0);
 
@@ -1148,7 +1170,7 @@ public sealed class SettingsWindow : Window
                         S.BingListDate = "";
                         S.BingIndex = -1;
                         Save();
-                        App.Fire(() => Bing.RefreshAsync(true));
+                        Scheduler.Manual(() => Bing.RefreshAsync(true));
                         MessageBox.Show(this, L.Tr("缓存已清空", "快取已清除"), Title);
                     }),
                     Ui.Btn(L.Tr("打开数据文件夹", "開啟資料資料夾"), () => Ui.Open(SettingsStore.Dir)),
@@ -1162,6 +1184,7 @@ public sealed class SettingsWindow : Window
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         var hadScreensaver = S.ScreensaverInstalled;
         if (hadScreensaver) ScreenSaver.Uninstall();
+        if (S.LockImageApplied) LockImage.RestoreDefaultAsync().Wait(8000); // 恢复锁屏默认图
         SettingsStore.Reset();
         L.Refresh(S.Language);
         Theme.Apply();
@@ -1172,11 +1195,7 @@ public sealed class SettingsWindow : Window
         App.Instance.ShowWidget(widget);
         App.Instance.SysWidget?.Close();
         App.Instance.ShowSysWidget(sysWidget);
-        App.Fire(async () =>
-        {
-            await Bing.RefreshAsync(true).ConfigureAwait(false);
-            await WeatherService.RefreshAsync().ConfigureAwait(false);
-        });
+        Scheduler.Tick(true); // 重置后 SyncSlot 归零：天气、名言、壁纸、锁屏图整批重新拿，一起显示
         _page = "home";
         Build();
     }

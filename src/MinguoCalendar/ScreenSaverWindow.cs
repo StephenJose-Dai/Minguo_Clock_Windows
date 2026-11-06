@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Minguo.Core;
 using WinForms = System.Windows.Forms;
 
 namespace MinguoCalendar;
@@ -77,6 +78,30 @@ public sealed class ScreenSaverWindow : Window
         }
         foreach (var w in windows)
             if (w._screen.Primary) w.Activate();
+        // 屏保可能一开几个小时：每 3 秒看一眼主程序有没有完成新的一批更新（天气、名言、壁纸）。
+        // 只有整批提交完成（SyncStamp 变了）才切换，所有显示器在同一瞬间一起换，不会半新半旧。
+        static string BgKey()
+        {
+            var st = SettingsStore.Current;
+            return $"{st.WallpaperMode}|{st.CustomWallpaper}|{Bing.CurrentFile}|{st.WallpaperDim}|{st.ThemeIndex}";
+        }
+        var lastBg = BgKey();
+        var reload = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        reload.Tick += (_, _) =>
+        {
+            if (!SettingsStore.ReloadIfSyncChanged()) return;
+            var bg = BgKey();
+            var bgChanged = bg != lastBg;
+            lastBg = bg;
+            var now = DateTime.Now;
+            foreach (var w in windows)
+            {
+                if (bgChanged) w._face.LoadBackground(); // 换图（里面也会刷新文字）
+                else w._face.Refresh(now);              // 只刷新天气、名言
+            }
+        };
+        reload.Start();
+
         // 屏保开始后的一点抖动不算“动了鼠标”
         var grace = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         grace.Tick += (_, _) =>

@@ -252,7 +252,7 @@ internal static class ScreenSaver
 
 /// <summary>
 /// 定时任务（界面线程，每分钟一次）：
-/// 天气 30 分钟、名言 30 分钟、必应壁纸 30 分钟、锁屏背景 30 分钟（以及换日、解锁、睡眠唤醒时立即检查），自动主题。
+/// 天气（默认 10 分钟）、名言和必应壁纸（默认 30 分钟）同一节拍按整点更新，锁屏图同时重画；换日、解锁、睡眠唤醒时立即检查；自动主题。
 /// </summary>
 internal static class Scheduler
 {
@@ -265,31 +265,35 @@ internal static class Scheduler
     private static DispatcherTimer? _lockDebounce;
     private static string _lockKey = "";
 
-    /// <summary>影响锁屏图样子的设置（签名、字体、排版、壁纸…）：变了就几秒后自动重新生成，不用等 30 分钟</summary>
+    /// <summary>影响锁屏图样子的设置（签名、字体、排版、壁纸…）：变了 1 秒后自动重新生成</summary>
     private static string LockKey()
     {
         var s = SettingsStore.Current;
         var layout = string.Join(";", s.LockLayout.OrderBy(kv => kv.Key).Select(kv => kv.Key + "=" + string.Join(",", kv.Value)));
+        // 天气每次拉取、名言换句、必应壁纸换张都会让 key 变化 → 几秒后重画锁屏图，锁屏上的天气始终是最新的
+        var weather = s.WeatherEnabled && s.WeatherCache is { } w ? w.FetchedAt.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture) : "";
         return string.Join("|", s.Signature, s.FontId, s.Language, s.FullEra, s.ChineseNumerals, s.WallpaperMode, s.CustomWallpaper,
-            s.WallpaperDim, s.ThemeIndex, s.LockDateStyle, layout);
+            s.WallpaperDim, s.ThemeIndex, s.LockDateStyle, layout, weather, s.QuoteText, s.BingIndex, s.WeatherEnabled);
     }
 
     private static void OnSettingsSaved()
     {
+        if (_syncing) return; // 整批更新由 SyncAsync 自己统一重画锁屏
         App.Current.Dispatcher.BeginInvoke(() =>
         {
+            if (_syncing) return;
             var s = SettingsStore.Current;
             var key = LockKey();
             if (!s.LockImageEnabled || key == _lockKey) return;
             _lockDebounce ??= CreateLockDebounce();
             _lockDebounce.Stop();
-            _lockDebounce.Start(); // 打字时每次都重新计时，停手 4 秒后再生成
+            _lockDebounce.Start(); // 打字（签名）时合并成一次，停手 1 秒就重画
         });
     }
 
     private static DispatcherTimer CreateLockDebounce()
     {
-        var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         t.Tick += (_, _) =>
         {
             t.Stop();
@@ -306,6 +310,9 @@ internal static class Scheduler
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
         _timer.Tick += (_, _) => Tick(false);
         _timer.Start();
+        // 整点 :00 / :30 准时触发（每分钟的计时器可能晚将近一分钟）
+        _boundary = new DispatcherTimer();
+        _boundary.Tick += (_, _) => { _boundary?.Stop(); Tick(false); };
         SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.PowerModeChanged += OnPower;
         SystemEvents.TimeChanged += OnTimeChanged;
@@ -316,6 +323,7 @@ internal static class Scheduler
     public static void Stop()
     {
         _timer?.Stop();
+        _boundary?.Stop();
         _lockDebounce?.Stop();
         SettingsStore.Saved -= OnSettingsSaved;
         SystemEvents.SessionSwitch -= OnSessionSwitch;
@@ -345,7 +353,43 @@ internal static class Scheduler
         App.Instance.SysWidget?.EnsureOnScreen();
     });
 
-    /// <summary>force：解锁、唤醒、启动时，到期的立刻做</summary>
+    // ================= 天气 / 名言 / 壁纸 / 锁屏图 同步更新 =================
+    // 两个频率、同一节拍，都按整点对齐：
+    //   · 天气：默认每 10 分钟（可选 5 / 10 / 15 / 30）——天气变化快；
+    //   · 名言、壁纸：默认每 30 分钟（可选 10 / 15 / 30 / 60）；到点时天气也一起刷新。
+    // 每一拍：要换的几样并行“准备”（这时界面还显示旧的）→ 全部好了在界面线程上同一瞬间“提交”
+    // → 立刻统一刷新界面并重画锁屏图；屏保也只在整批提交后才切换。
+    // 下一张壁纸提前缓存好，到点不用等下载；天气、一言要联网，一般 1~3 秒，最多等 20 秒。
+
+    private static volatile bool _syncing;
+    private static DateTime _lastRetry = DateTime.MinValue;
+
+    private static TimeSpan WeatherPeriod => TimeSpan.FromMinutes(Math.Clamp(SettingsStore.Current.WeatherInterval, 5, 60));
+    private static TimeSpan RotatePeriod => TimeSpan.FromMinutes(Math.Clamp(SettingsStore.Current.RotateInterval, 5, 120));
+
+    private static long SlotOf(DateTime t, TimeSpan period) => t.Ticks / period.Ticks;
+
+    private static DispatcherTimer? _boundary;
+
+    /// <summary>把整点计时器对准下一个天气 / 名言壁纸时刻（取更近的那个；睡眠唤醒、改时间、改频率后都会重新对准）</summary>
+    private static void ArmBoundary()
+    {
+        if (_boundary == null) return;
+        var now = DateTime.Now;
+        DateTime NextOf(TimeSpan p) => new((SlotOf(now, p) + 1) * p.Ticks, now.Kind);
+        var s = SettingsStore.Current;
+        var next = NextOf(RotatePeriod);
+        if (s.WeatherEnabled)
+        {
+            var w = NextOf(WeatherPeriod);
+            if (w < next) next = w;
+        }
+        _boundary.Stop();
+        _boundary.Interval = next - now + TimeSpan.FromMilliseconds(300);
+        _boundary.Start();
+    }
+
+    /// <summary>每分钟一次 + 每个整点时刻；force：启动、解锁、唤醒、改时间时</summary>
     public static void Tick(bool force)
     {
         var s = SettingsStore.Current;
@@ -353,33 +397,101 @@ internal static class Scheduler
         var dayChanged = DateTime.Today != _lastDay;
         _lastDay = DateTime.Today;
         Minute?.Invoke();
+        ArmBoundary();
         if (_busy) return;
+
+        var now = DateTime.Now;
+        var wPeriod = WeatherPeriod;
+        var rSlot = SlotOf(now, RotatePeriod);
+        var wSlot = SlotOf(now, wPeriod);
+        var rotate = rSlot != s.SyncSlot;                          // 该换名言、壁纸了（或睡眠/关机跨过了整点）
+        var weatherDue = s.WeatherEnabled && wSlot != s.WeatherSlot; // 该刷新天气了
+        var missing = (s.WeatherEnabled && s.WeatherCache == null) || string.IsNullOrEmpty(s.QuoteText)
+            || (s.WallpaperMode == 2 && Bing.CurrentFile == null);
+        // 天气上一拍没拿到（断网等）：过 3 分钟再试，拿到就和锁屏图一起更新
+        var weatherLate = s.WeatherEnabled && (s.WeatherCache == null || now - s.WeatherCache.FetchedAt > wPeriod + wPeriod)
+            && now - _lastRetry > TimeSpan.FromMinutes(3);
+        var lockMissing = s.LockImageEnabled && s.LockImageSetAt == default;
+        if (!rotate && !weatherDue && !missing && !weatherLate && !lockMissing && !dayChanged) return;
+        if (weatherLate) _lastRetry = now;
+
         _busy = true;
         App.Fire(async () =>
         {
+            try { await SyncAsync(rSlot, wSlot, rotate).ConfigureAwait(false); }
+            finally { _busy = false; }
+        });
+    }
+
+    private static async Task Safe(Task t)
+    {
+        try { await t.ConfigureAwait(false); }
+        catch (Exception e) { App.Log(e); }
+    }
+
+    /// <summary>整批：并行准备 → 同时提交 → 统一刷新界面 + 重画锁屏图</summary>
+    private static async Task SyncAsync(long rSlot, long wSlot, bool rotate)
+    {
+        var s = SettingsStore.Current;
+        _syncing = true;
+        App.BeginBatch();
+        try
+        {
+            var weather = s.WeatherEnabled ? WeatherService.PrepareAsync() : Task.FromResult<WeatherData?>(null);
+            var quote = rotate || string.IsNullOrEmpty(s.QuoteText) ? Quotes.PickNextAsync() : Task.FromResult<string>("");
+            var wall = s.WallpaperMode == 2 && (rotate || Bing.CurrentFile == null) ? Bing.PrepareNextAsync() : Task.FromResult<Bing.Next?>(null);
+
+            var all = Task.WhenAll(Safe(weather), Safe(quote), Safe(wall));
+            await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(20))).ConfigureAwait(false);
+
+            // 同一瞬间提交：在界面线程上一口气写完，期间不会插进任何一次每秒刷新
+            await App.Current.Dispatcher.InvokeAsync(() =>
+            {
+                if (weather.IsCompletedSuccessfully && weather.Result is { } w) WeatherService.Commit(w);
+                if (quote.IsCompletedSuccessfully && quote.Result is { Length: > 0 } q) Quotes.Commit(q);
+                if (wall.IsCompletedSuccessfully && wall.Result is { } n) Bing.Commit(n);
+                s.SyncSlot = rSlot;
+                s.WeatherSlot = wSlot;
+                s.SyncStamp = DateTime.Now.Ticks;
+                SettingsStore.Save();
+                _lockKey = LockKey(); // 锁屏图下面统一重画，不再走防抖
+            });
+            Bing.AfterCommit(); // 清旧图、预下载下一张
+        }
+        finally
+        {
+            _syncing = false;
+            App.EndBatch(); // 立刻统一刷新一次界面
+        }
+        if (s.LockImageEnabled) await LockImage.UpdateAsync().ConfigureAwait(false); // 同时重画锁屏图
+    }
+
+    /// <summary>
+    /// 手动换一句 / 换一张壁纸 / 刷新天气：只换那一样，但界面、锁屏图、屏保同时更新，不等防抖。
+    /// </summary>
+    public static void Manual(Func<Task> change)
+    {
+        App.Fire(async () =>
+        {
+            _syncing = true;
+            App.BeginBatch();
             try
             {
-                var tasks = new System.Collections.Generic.List<Task>
+                await change().ConfigureAwait(false);
+                await App.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    Quotes.MaybeRotateAsync(),
-                };
-                if (s.WallpaperMode == 2) tasks.Add(Bing.RefreshAsync());
-                if (s.WeatherEnabled) tasks.Add(WeatherService.RefreshIfStaleAsync());
-                foreach (var t in tasks)
-                {
-                    try { await t.ConfigureAwait(false); }
-                    catch (Exception e) { App.Log(e); }
-                }
-                if (s.LockImageEnabled && (dayChanged || force || DateTime.Now - s.LockImageSetAt >= TimeSpan.FromMinutes(30)))
-                {
-                    var due = dayChanged || DateTime.Now - s.LockImageSetAt >= TimeSpan.FromMinutes(30);
-                    if (due) await LockImage.UpdateAsync().ConfigureAwait(false);
-                }
+                    var s = SettingsStore.Current;
+                    s.SyncStamp = DateTime.Now.Ticks; // 让正在运行的屏保也切换
+                    SettingsStore.Save();
+                    _lockKey = LockKey();
+                });
             }
             finally
             {
-                _busy = false;
+                _syncing = false;
+                App.EndBatch();
             }
+            if (SettingsStore.Current.LockImageEnabled) await LockImage.UpdateAsync().ConfigureAwait(false);
         });
     }
 }

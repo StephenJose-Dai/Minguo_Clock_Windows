@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
@@ -12,7 +13,7 @@ namespace MinguoCalendar;
 
 /// <summary>
 /// 锁屏背景图：Windows 不允许第三方程序替换锁屏界面本身（时间、密码输入都由系统负责），
-/// 所以这里把“壁纸 + 民国日期 + 农历 + 天气 + 名言 + 签名”画成一张图，设为系统锁屏图片，每 30 分钟更新一次。
+/// 所以这里把“壁纸 + 民国日期 + 农历 + 天气 + 名言 + 签名”画成一张图，设为系统锁屏图片；天气、名言、壁纸一更新就同时重画。
 /// </summary>
 internal static class LockImage
 {
@@ -78,12 +79,14 @@ internal static class LockImage
 
         var s = SettingsStore.Current;
         s.LockImageSetAt = DateTime.Now;
-        SettingsStore.Save();
         if (error == null)
         {
+            s.LockImageApplied = true; // 记下我们接管了锁屏，卸载/关闭时好恢复
+            SettingsStore.Save();
             LastMessage = L.Tr("已更新锁屏背景：", "已更新鎖定畫面背景：") + DateTime.Now.ToString("HH:mm");
             return null;
         }
+        SettingsStore.Save();
 
         // 设置不了：另存一份到“图片\民国纪年”，用户可以自己在系统设置里选
         var copy = SaveToPictures(file);
@@ -124,6 +127,32 @@ internal static class LockImage
         using var ms = new MemoryStream();
         enc.Save(ms);
         return ms.ToArray();
+    }
+
+    /// <summary>
+    /// 把锁屏背景恢复成 Windows 默认图（关闭功能、重置、卸载时用）。
+    /// 只有我们之前真的接管过（LockImageApplied）才动，免得改到用户自己设的锁屏。
+    /// </summary>
+    public static async Task RestoreDefaultAsync()
+    {
+        var s = SettingsStore.Current;
+        if (!s.LockImageApplied) return;
+        try
+        {
+            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Web", "Screen");
+            var img = Directory.Exists(dir) ? Directory.GetFiles(dir, "*.jpg").OrderBy(x => x, StringComparer.OrdinalIgnoreCase).FirstOrDefault() : null;
+            if (img != null)
+            {
+                var sf = await StorageFile.GetFileFromPathAsync(img);
+                await LockScreen.SetImageFileAsync(sf);
+            }
+        }
+        catch
+        {
+            // 恢复不了也不阻塞卸载
+        }
+        s.LockImageApplied = false;
+        SettingsStore.Save();
     }
 
     /// <summary>打开系统锁屏设置</summary>

@@ -187,20 +187,24 @@ public static partial class WeatherService
         SettingsStore.Save();
     }
 
-    public static async Task<bool> RefreshAsync(CancellationToken ct = default)
+    /// <summary>
+    /// 准备最新天气：定位（到期才定位）、解析地名、拉预报，只返回，不改当前显示。
+    /// 和名言、壁纸一起准备好后再由 Commit 同时切换。
+    /// </summary>
+    public static async Task<WeatherData?> PrepareAsync(CancellationToken ct = default)
     {
         await Gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             var s = SettingsStore.Current;
-            if (!s.WeatherEnabled) return false;
+            if (!s.WeatherEnabled) return null;
             var now = DateTime.Now;
 
             // 1. 自动定位
             if (s.AutoLocate && (!s.HasLocation || now - s.LocatedAt > Relocate) && now - _lastLocateAttempt > Retry)
                 await LocateNowAsync(ct).ConfigureAwait(false);
 
-            if (!s.HasLocation) return false;
+            if (!s.HasLocation) return null;
 
             // 2. 地名
             if (string.IsNullOrEmpty(s.PlaceCountry))
@@ -225,16 +229,26 @@ public static partial class WeatherService
                 try { w = await FetchOpenMeteoAsync(s.Lat, s.Lon, s.CityName, ct).ConfigureAwait(false); }
                 catch { w = null; }
             }
-            if (w == null) return false;
-            s.WeatherCache = w;
-            SettingsStore.Save();
-            Updated?.Invoke();
-            return true;
+            return w;
         }
         finally
         {
             Gate.Release();
         }
+    }
+
+    /// <summary>切换到准备好的天气（只改内存，不保存、不发通知）</summary>
+    public static void Commit(WeatherData w) => SettingsStore.Current.WeatherCache = w;
+
+    /// <summary>立刻刷新天气（单独刷新时用）</summary>
+    public static async Task<bool> RefreshAsync(CancellationToken ct = default)
+    {
+        var w = await PrepareAsync(ct).ConfigureAwait(false);
+        if (w == null) return false;
+        Commit(w);
+        SettingsStore.Save();
+        Updated?.Invoke();
+        return true;
     }
 
     // ---------------- Open-Meteo ----------------

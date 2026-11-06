@@ -72,7 +72,7 @@ public sealed class WidgetWindow : DesktopWidget
         var onQuote = e.OriginalSource is DependencyObject d && (d == _quote || (d is Visual v && _quote.IsAncestorOf(v)));
         if (onQuote && _quote.Visibility == Visibility.Visible)
         {
-            App.Fire(Quotes.NextAsync);
+            Scheduler.Manual(Quotes.NextAsync);
             return true;
         }
         return false;
@@ -156,7 +156,7 @@ public sealed class WidgetWindow : DesktopWidget
             SettingsStore.Save();
             ShowChrome(false);
         }, true, s.WidgetLocked);
-        Item(L.Tr("换一句", "換一句"), () => App.Fire(Quotes.NextAsync));
+        Item(L.Tr("换一句", "換一句"), () => Scheduler.Manual(Quotes.NextAsync));
         Item(L.Tr("文字颜色：", "文字顏色：") + (s.WidgetTextStyle == 1 ? L.Tr("改为白字", "改為白字") : L.Tr("改为深色字", "改為深色字")), () =>
         {
             s.WidgetTextStyle = s.WidgetTextStyle == 1 ? 0 : 1;

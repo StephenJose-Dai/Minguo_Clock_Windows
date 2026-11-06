@@ -74,6 +74,8 @@ public sealed class AppSettings
     // ---------- 锁屏背景 ----------
     public bool LockImageEnabled { get; set; }
     public DateTime LockImageSetAt { get; set; }
+    /// <summary>我们是否正在接管系统锁屏图（用来在关闭/卸载时恢复默认，避免图片冻在那）</summary>
+    public bool LockImageApplied { get; set; }
     /// <summary>锁屏图各块的位置（设计坐标 1600×900）：块名 → [右边缘 x, 上边缘 y]；没有的块用默认位置</summary>
     public Dictionary<string, double[]> LockLayout { get; set; } = new();
     /// <summary>锁屏图日期写法：0 民国年 + 农历（不重复系统的公历月日，默认），1 完整民国日期</summary>
@@ -100,6 +102,18 @@ public sealed class AppSettings
     public string ApiSecret { get; set; } = "";
     public string ApiUrl { get; set; } = "";
     public WeatherData? WeatherCache { get; set; }
+
+    // ---------- 天气 / 名言 / 壁纸 / 锁屏图 同步更新 ----------
+    /// <summary>天气多久刷新一次（分钟）：5 / 10 / 15 / 30，按整点对齐</summary>
+    public int WeatherInterval { get; set; } = 10;
+    /// <summary>名言、壁纸多久换一次（分钟）：10 / 15 / 30 / 60，按整点对齐；换的时候天气也一起刷新</summary>
+    public int RotateInterval { get; set; } = 30;
+    /// <summary>最近一次换名言壁纸所在的时段</summary>
+    public long SyncSlot { get; set; } = -1;
+    /// <summary>最近一次刷新天气所在的时段</summary>
+    public long WeatherSlot { get; set; } = -1;
+    /// <summary>最近一次整批提交的时间（屏保看到它变了才切换，保证四样一起变）</summary>
+    public long SyncStamp { get; set; }
 
     // ---------- 名言 ----------
     public string QuoteText { get; set; } = "";
@@ -168,6 +182,34 @@ public static class SettingsStore
                     // 设置文件损坏：用默认设置
                 }
                 return _current ??= new AppSettings();
+            }
+        }
+    }
+
+    private static DateTime _lastWrite;
+
+    /// <summary>
+    /// 屏保（单独的进程）用：磁盘上的设置有了新的一整批更新（SyncStamp 变了）才换成新的，返回 true。
+    /// 只读不写；主程序写到一半时不会切换，所以天气、名言、壁纸总是一起变。
+    /// </summary>
+    public static bool ReloadIfSyncChanged()
+    {
+        lock (Gate)
+        {
+            try
+            {
+                if (!File.Exists(FilePath)) return false;
+                var t = File.GetLastWriteTimeUtc(FilePath);
+                if (t == _lastWrite) return false; // 文件没动过，不用解析
+                _lastWrite = t;
+                var s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), Json);
+                if (s == null || (_current != null && s.SyncStamp == _current.SyncStamp)) return false;
+                _current = s;
+                return true;
+            }
+            catch
+            {
+                return false; // 正在被替换，下次再读
             }
         }
     }

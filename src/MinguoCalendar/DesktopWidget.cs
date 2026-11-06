@@ -101,7 +101,13 @@ public abstract class DesktopWidget : Window
         StateChanged += (_, _) => { if (WindowState != WindowState.Normal) WindowState = WindowState.Normal; };
         SourceInitialized += OnSourceInitialized;
         ContextMenu = new ContextMenu();
-        ContextMenuOpening += (_, _) => { ContextMenu.Items.Clear(); FillMenu(ContextMenu); };
+        ContextMenuOpening += (_, e) =>
+        {
+            // 锁定后右键什么都不弹，所有选项都在设置里
+            if (Locked) { e.Handled = true; return; }
+            ContextMenu.Items.Clear();
+            FillMenu(ContextMenu);
+        };
         Loaded += (_, _) => { ApplyContentOpacity(); LayoutContent(); EnsureOnScreen(); };
     }
 

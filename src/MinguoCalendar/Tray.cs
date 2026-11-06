@@ -141,10 +141,10 @@ internal sealed class Tray : IDisposable
             () => App.Instance.ShowWidget(!SettingsStore.Current.WidgetEnabled));
         Item(s.SysWidgetEnabled ? L.Tr("隐藏系统资源组件", "隱藏系統資源組件") : L.Tr("显示系统资源组件", "顯示系統資源組件"),
             () => App.Instance.ShowSysWidget(!SettingsStore.Current.SysWidgetEnabled));
-        Item(L.Tr("换一句名言", "換一句名言"), () => App.Fire(Quotes.NextAsync));
-        if (s.WallpaperMode == 2) Item(L.Tr("换一张壁纸", "換一張桌布"), () => App.Fire(() => Bing.RotateAsync()));
+        Item(L.Tr("换一句名言", "換一句名言"), () => Scheduler.Manual(Quotes.NextAsync));
+        if (s.WallpaperMode == 2) Item(L.Tr("换一张壁纸", "換一張桌布"), () => Scheduler.Manual(() => Bing.RotateAsync()));
         if (s.LockImageEnabled) Item(L.Tr("立即更新锁屏背景", "立即更新鎖定畫面背景"), () => App.Fire(() => LockImage.UpdateAsync()));
-        if (s.WeatherEnabled) Item(L.Tr("刷新天气", "重新整理天氣"), () => App.Fire(() => WeatherService.RefreshAsync()));
+        if (s.WeatherEnabled) Item(L.Tr("刷新天气", "重新整理天氣"), () => Scheduler.Manual(() => WeatherService.RefreshAsync()));
         Item(L.Tr("预览屏保", "預覽螢幕保護程式"), ScreenSaver.Preview);
         _menu.Items.Add(new WinForms.ToolStripSeparator());
         Item(L.Tr("退出", "結束"), () => App.Instance.Quit());

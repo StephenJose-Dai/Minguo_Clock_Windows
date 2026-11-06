@@ -57,6 +57,14 @@ public partial class App : Application
         Bing.ScreenSize = PrimaryPixels;
         Theme.Apply();
 
+        // 卸载时调用：把锁屏恢复默认后退出，不启动托盘
+        if (e.Args.Contains("--restore-lockscreen", StringComparer.OrdinalIgnoreCase))
+        {
+            try { LockImage.RestoreDefaultAsync().Wait(10000); } catch (Exception ex) { Log(ex); }
+            Shutdown();
+            return;
+        }
+
         var (mode, hwnd) = ParseArgs(e.Args);
         switch (mode)
         {
@@ -154,12 +162,25 @@ public partial class App : Application
 
     private void RequestRefresh()
     {
+        if (Volatile.Read(ref _batch) > 0) return; // 整批更新中：先不刷，结束时统一刷一次
         Dispatcher.BeginInvoke(() =>
         {
             if (_debounce == null) return;
             _debounce.Stop();
             _debounce.Start();
         });
+    }
+
+    private static int _batch;
+
+    /// <summary>开始一批更新（天气、名言、壁纸一起换）：期间界面不刷新，避免先后跳</summary>
+    public static void BeginBatch() => Interlocked.Increment(ref _batch);
+
+    /// <summary>结束这批：立刻统一刷新一次界面（不等防抖）</summary>
+    public static void EndBatch()
+    {
+        if (Interlocked.Decrement(ref _batch) > 0) return;
+        Current?.Dispatcher.BeginInvoke(() => Refreshed?.Invoke());
     }
 
     /// <summary>屏保参数：/s、/p 1234、/p:1234、/c、/c:1234；以 .scr 身份双击且无参数时 = /c</summary>
