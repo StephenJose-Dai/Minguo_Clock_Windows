@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -261,8 +262,47 @@ internal static class Scheduler
 
     public static event Action? Minute;
 
+    private static DispatcherTimer? _lockDebounce;
+    private static string _lockKey = "";
+
+    /// <summary>影响锁屏图样子的设置（签名、字体、排版、壁纸…）：变了就几秒后自动重新生成，不用等 30 分钟</summary>
+    private static string LockKey()
+    {
+        var s = SettingsStore.Current;
+        var layout = string.Join(";", s.LockLayout.OrderBy(kv => kv.Key).Select(kv => kv.Key + "=" + string.Join(",", kv.Value)));
+        return string.Join("|", s.Signature, s.FontId, s.Language, s.FullEra, s.ChineseNumerals, s.WallpaperMode, s.CustomWallpaper,
+            s.WallpaperDim, s.ThemeIndex, s.LockDateStyle, layout);
+    }
+
+    private static void OnSettingsSaved()
+    {
+        App.Current.Dispatcher.BeginInvoke(() =>
+        {
+            var s = SettingsStore.Current;
+            var key = LockKey();
+            if (!s.LockImageEnabled || key == _lockKey) return;
+            _lockDebounce ??= CreateLockDebounce();
+            _lockDebounce.Stop();
+            _lockDebounce.Start(); // 打字时每次都重新计时，停手 4 秒后再生成
+        });
+    }
+
+    private static DispatcherTimer CreateLockDebounce()
+    {
+        var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            _lockKey = LockKey();
+            App.Fire(() => LockImage.UpdateAsync());
+        };
+        return t;
+    }
+
     public static void Start()
     {
+        _lockKey = LockKey();
+        SettingsStore.Saved += OnSettingsSaved;
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
         _timer.Tick += (_, _) => Tick(false);
         _timer.Start();
@@ -276,6 +316,8 @@ internal static class Scheduler
     public static void Stop()
     {
         _timer?.Stop();
+        _lockDebounce?.Stop();
+        SettingsStore.Saved -= OnSettingsSaved;
         SystemEvents.SessionSwitch -= OnSessionSwitch;
         SystemEvents.PowerModeChanged -= OnPower;
         SystemEvents.TimeChanged -= OnTimeChanged;
@@ -297,7 +339,11 @@ internal static class Scheduler
 
     private static void OnTimeChanged(object? sender, EventArgs e) => App.Current.Dispatcher.BeginInvoke(() => Tick(true));
 
-    private static void OnDisplay(object? sender, EventArgs e) => App.Current.Dispatcher.BeginInvoke(() => App.Instance.Widget?.EnsureOnScreen());
+    private static void OnDisplay(object? sender, EventArgs e) => App.Current.Dispatcher.BeginInvoke(() =>
+    {
+        App.Instance.Widget?.EnsureOnScreen();
+        App.Instance.SysWidget?.EnsureOnScreen();
+    });
 
     /// <summary>force：解锁、唤醒、启动时，到期的立刻做</summary>
     public static void Tick(bool force)

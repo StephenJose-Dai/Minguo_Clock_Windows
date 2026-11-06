@@ -23,7 +23,8 @@ public sealed class SettingsWindow : Window
     [
         ("home", "首页", "首頁"),
         ("display", "显示", "顯示"),
-        ("widget", "桌面小组件", "桌面小工具"),
+        ("widget", "时钟组件", "時鐘組件"),
+        ("sys", "系统资源", "系統資源"),
         ("lock", "锁屏背景", "鎖定畫面背景"),
         ("screensaver", "屏幕保护", "螢幕保護"),
         ("wallpaper", "壁纸", "桌布"),
@@ -153,6 +154,7 @@ public sealed class SettingsWindow : Window
         {
             "display" => DisplayPage(),
             "widget" => WidgetPage(),
+            "sys" => SysPage(),
             "lock" => LockPage(),
             "screensaver" => ScreenSaverPage(),
             "wallpaper" => WallpaperPage(),
@@ -377,46 +379,82 @@ public sealed class SettingsWindow : Window
 
     private StackPanel WidgetPage()
     {
-        return Page(L.Tr("桌面小组件", "桌面小工具"), L.Tr("透明背景，没有边框，固定在桌面上，不会挡住其他窗口", "透明背景，沒有邊框，固定在桌面上，不會擋住其他視窗"),
-            Ui.Section(L.Tr("小组件", "小工具"),
-                Ui.SwitchRow(L.Tr("显示桌面小组件", "顯示桌面小工具"), null, S.WidgetEnabled, v => App.Instance.ShowWidget(v)),
+        return Page(L.Tr("时钟组件", "時鐘組件"), L.Tr("透明背景、无边框，固定在桌面上，不挡住其他窗口", "透明背景、無邊框，固定在桌面上，不擋住其他視窗"),
+            Ui.Section(L.Tr("时钟组件", "時鐘組件"),
+                Ui.SwitchRow(L.Tr("显示时钟组件", "顯示時鐘組件"), L.Tr("时分秒、民国日期、农历、天气、名言", "時分秒、民國日期、農曆、天氣、名言"), S.WidgetEnabled, v => App.Instance.ShowWidget(v)),
                 Ui.Text(L.Tr("文字颜色", "文字顏色"), 14),
                 Ui.Choice([L.Tr("白字（深色壁纸）", "白字（深色桌布）"), L.Tr("深色字（浅色壁纸）", "深色字（淺色桌布）")], S.WidgetTextStyle, i =>
                 {
                     S.WidgetTextStyle = i;
                     Save();
                 }),
-                Ui.SwitchRow(L.Tr("显示天气", "顯示天氣"), null, S.WidgetShowWeather, v =>
-                {
-                    S.WidgetShowWeather = v;
-                    Save();
-                }),
-                Ui.SwitchRow(L.Tr("显示名言", "顯示名言"), L.Tr("每 30 分钟换一句，点一下也能换", "每 30 分鐘換一句，點一下也能換"), S.WidgetShowQuote, v =>
-                {
-                    S.WidgetShowQuote = v;
-                    Save();
-                }),
-                Ui.SwitchRow(L.Tr("锁定位置和大小", "鎖定位置和大小"), L.Tr("锁定后不能拖动，也不显示虚线框", "鎖定後不能拖曳，也不顯示虛線框"), S.WidgetLocked, v =>
-                {
-                    S.WidgetLocked = v;
-                    Save();
-                }),
+                Ui.SwitchRow(L.Tr("显示天气", "顯示天氣"), null, S.WidgetShowWeather, v => { S.WidgetShowWeather = v; Save(); }),
+                Ui.SwitchRow(L.Tr("显示名言", "顯示名言"), L.Tr("每 30 分钟换一句，点一下也能换", "每 30 分鐘換一句，點一下也能換"), S.WidgetShowQuote, v => { S.WidgetShowQuote = v; Save(); }),
+                Ui.SwitchRow(L.Tr("锁定位置和大小", "鎖定位置和大小"), L.Tr("锁定后不能拖动，也不显示虚线框", "鎖定後不能拖曳，也不顯示虛線框"), S.WidgetLocked, v => { S.WidgetLocked = v; Save(); }),
                 Ui.Buttons(Ui.Btn(L.Tr("恢复默认位置和大小", "恢復預設位置和大小"), () =>
                 {
                     if (App.Instance.Widget is { } w) w.ResetBounds();
-                    else
-                    {
-                        S.WidgetX = double.NaN;
-                        S.WidgetY = double.NaN;
-                        S.WidgetWidth = 420;
-                        S.WidgetHeight = 300;
-                        Save();
-                    }
+                    else { S.WidgetX = double.NaN; S.WidgetY = double.NaN; S.WidgetWidth = 420; S.WidgetHeight = 300; Save(); }
                 }))),
             Ui.Section(L.Tr("怎么调整", "怎麼調整"),
                 Ui.Para(L.Tr(
-                    "· 鼠标移到小组件上会出现虚线框：按住拖动可以移动；拖四条边或四个角可以调整宽度和高度（宽度最多一屏，高度最多屏幕的 60%）。\n· 右键小组件：锁定、换一句、切换文字颜色、隐藏。\n· 按 Win + D 显示桌面时小组件仍然在。",
-                    "· 滑鼠移到小工具上會出現虛線框：按住拖曳可以移動；拖曳四條邊或四個角可以調整寬度和高度（寬度最多一個螢幕，高度最多螢幕的 60%）。\n· 右鍵小工具：鎖定、換一句、切換文字顏色、隱藏。\n· 按 Win + D 顯示桌面時小工具仍然在。"))));
+                    "鼠标移到组件上会出现虚线框：按住拖动移动，拖四边或四角调整大小。右键可锁定、换一句、切换文字颜色、隐藏。按 Win + D 显示桌面时组件仍在。",
+                    "滑鼠移到組件上會出現虛線框：按住拖曳移動，拖四邊或四角調整大小。右鍵可鎖定、換一句、切換文字顏色、隱藏。按 Win + D 顯示桌面時組件仍在。"))));
+    }
+
+    private StackPanel SysPage()
+    {
+        double[] ops = [1.0, 0.8, 0.6, 0.4, 0.25, 0.12];
+        var oi = Array.FindIndex(ops, o => Math.Abs(o - S.SysWidgetOpacity) < 0.03);
+        if (oi < 0) oi = 1;
+        int[] intervals = [500, 1000, 1500, 2000, 3000, 5000];
+        var ii = Array.IndexOf(intervals, S.SysInterval);
+        if (ii < 0) ii = 2;
+
+        return Page(L.Tr("系统资源", "系統資源"), L.Tr("独立的桌面组件，显示 CPU、显卡、内存、磁盘、温度、网速、连接数等，可单独摆放、设透明度", "獨立的桌面組件，顯示 CPU、顯示卡、記憶體、磁碟、溫度、網速、連線數等，可單獨擺放、設透明度"),
+            Ui.Section(L.Tr("系统资源组件", "系統資源組件"),
+                Ui.SwitchRow(L.Tr("显示系统资源组件", "顯示系統資源組件"), null, S.SysWidgetEnabled, v => App.Instance.ShowSysWidget(v)),
+                Ui.Text(L.Tr("透明度", "透明度"), 14),
+                Ui.Choice(["100%", "80%", "60%", "40%", L.Tr("25%（较淡）", "25%（較淡）"), L.Tr("12%（水印）", "12%（浮水印）")], oi, i =>
+                {
+                    S.SysWidgetOpacity = ops[i];
+                    Save();
+                }),
+                Ui.Text(L.Tr("刷新速度", "刷新速度"), 14),
+                Ui.Choice(intervals.Select(ms => ms >= 1000 ? $"{ms / 1000.0:0.#}s" : $"{ms}ms").ToList(), ii, i =>
+                {
+                    S.SysInterval = intervals[i];
+                    Save();
+                    SysInfo.ApplyInterval();
+                }),
+                Ui.Text(L.Tr("文字颜色", "文字顏色"), 14),
+                Ui.Choice([L.Tr("白字（深色壁纸）", "白字（深色桌布）"), L.Tr("深色字（浅色壁纸）", "深色字（淺色桌布）")], S.SysWidgetTextStyle, i =>
+                {
+                    S.SysWidgetTextStyle = i;
+                    Save();
+                }),
+                Ui.SwitchRow(L.Tr("锁定位置和大小", "鎖定位置和大小"), null, S.SysWidgetLocked, v => { S.SysWidgetLocked = v; Save(); }),
+                Ui.Buttons(
+                    Ui.Btn(L.Tr("连接详情…", "連線詳情…"), ConnectionsWindow.ShowSingleton),
+                    Ui.Btn(L.Tr("恢复默认位置和大小", "恢復預設位置和大小"), () =>
+                    {
+                        if (App.Instance.SysWidget is { } w) w.ResetBounds();
+                        else { S.SysWidgetX = double.NaN; S.SysWidgetY = double.NaN; S.SysWidgetWidth = 340; S.SysWidgetHeight = 300; Save(); }
+                    }))),
+            Ui.Section(L.Tr("显示哪些", "顯示哪些"),
+                Ui.SwitchRow("CPU", L.Tr("使用率，带温度（若主板支持）", "使用率，帶溫度（若主機板支援）"), S.SysShowCpu, v => { S.SysShowCpu = v; Save(); }),
+                Ui.SwitchRow(L.Tr("显卡", "顯示卡"), L.Tr("使用率，读不到就不显示", "使用率，讀不到就不顯示"), S.SysShowGpu, v => { S.SysShowGpu = v; Save(); }),
+                Ui.SwitchRow(L.Tr("内存", "記憶體"), L.Tr("使用率与已用/总量", "使用率與已用/總量"), S.SysShowMem, v => { S.SysShowMem = v; Save(); }),
+                Ui.SwitchRow(L.Tr("磁盘", "磁碟"), L.Tr("每个硬盘的使用率与已用/总量", "每個硬碟的使用率與已用/總量"), S.SysShowDisk, v => { S.SysShowDisk = v; Save(); }),
+                Ui.SwitchRow(L.Tr("磁盘读写", "磁碟讀寫"), L.Tr("实时读写速度折线", "即時讀寫速度折線"), S.SysShowDiskIo, v => { S.SysShowDiskIo = v; Save(); }),
+                Ui.SwitchRow(L.Tr("温度", "溫度"), L.Tr("主板温度，部分机器读不到会显示“—”", "主機板溫度，部分機器讀不到會顯示「—」"), S.SysShowTemp, v => { S.SysShowTemp = v; Save(); }),
+                Ui.SwitchRow(L.Tr("网速", "網速"), L.Tr("实时上传、下载速度", "即時上傳、下載速度"), S.SysShowNet, v => { S.SysShowNet = v; Save(); }),
+                Ui.SwitchRow(L.Tr("连接数", "連線數"), L.Tr("当前 TCP 连接数，点组件上的“连接”看详情", "目前 TCP 連線數，點組件上的「連線」看詳情"), S.SysShowConns, v => { S.SysShowConns = v; Save(); }),
+                Ui.SwitchRow(L.Tr("开机时长", "開機時長"), null, S.SysShowUptime, v => { S.SysShowUptime = v; Save(); })),
+            Ui.Section(L.Tr("连接详情", "連線詳情"),
+                Ui.Para(L.Tr(
+                    "连接详情里能看到每条连接属于哪个进程（名称、PID）、本地 IP 和端口、连接到的远程 IP 和端口、状态。连接很多时可在那个窗口里调整刷新间隔、按进程或地址筛选。只读本机，和任务管理器的“网络”一样。",
+                    "連線詳情裡能看到每條連線屬於哪個行程（名稱、PID）、本地 IP 和連接埠、連到的遠端 IP 和連接埠、狀態。連線很多時可在那個視窗裡調整刷新間隔、按行程或位址篩選。只讀本機，和工作管理員的「網路」一樣。"))));
     }
 
     // ================= 锁屏背景 =================
@@ -432,7 +470,7 @@ public sealed class SettingsWindow : Window
         editor.LayoutEdited += () =>
         {
             Save();
-            if (_lockStatus != null) _lockStatus.Text = L.Tr("排版已保存，点“立即更新”应用到锁屏", "排版已儲存，點「立即更新」套用到鎖定畫面");
+            if (_lockStatus != null) _lockStatus.Text = L.Tr("排版已保存，几秒后自动应用到锁屏", "排版已儲存，幾秒後自動套用到鎖定畫面");
         };
         var host = new Border { Child = editor, Margin = new Thickness(0, 0, 0, 10) };
         host.SizeChanged += (_, e) =>
@@ -452,8 +490,16 @@ public sealed class SettingsWindow : Window
                     Ui.Btn(L.Tr("打开系统锁屏设置", "開啟系統鎖定畫面設定"), LockImage.OpenSystemSettings)),
                 _lockStatus),
             Ui.Section(L.Tr("排版", "排版"),
-                Ui.Para(L.Tr("按住日期、农历、天气、名言、签名任意一块拖到想要的位置，松手自动保存。白框是系统时间日期的位置，建议避开。",
-                    "按住日期、農曆、天氣、名言、簽名任意一塊拖到想要的位置，放開自動儲存。白框是系統時間日期的位置，建議避開。")),
+                Ui.Text(L.Tr("日期写法", "日期寫法"), 14),
+                Ui.Choice([L.Tr("民国年 + 农历（系统已显示月日，不重复）", "民國年 + 農曆（系統已顯示月日，不重複）"), L.Tr("完整民国日期", "完整民國日期")],
+                    S.LockDateStyle, i =>
+                    {
+                        S.LockDateStyle = i;
+                        Save();
+                        _preview?.LoadBackground();
+                    }),
+                Ui.Para(L.Tr("按住日期、农历、天气、名言、签名任意一块拖到想要的位置，松手自动保存，几秒后自动应用到锁屏。白框是系统时间日期的位置，建议避开。",
+                    "按住日期、農曆、天氣、名言、簽名任意一塊拖到想要的位置，放開自動儲存，幾秒後自動套用到鎖定畫面。白框是系統時間日期的位置，建議避開。")),
                 host,
                 Ui.Buttons(
                     Ui.Btn(L.Tr("应用到锁屏", "套用到鎖定畫面"), UpdateLockImage, accent: true),
@@ -1048,44 +1094,43 @@ public sealed class SettingsWindow : Window
         names.Children.Add(Ui.Text(L.Tr("作者 ", "作者 ") + AppConfig.Author, 13, "SubBrush"));
         head.Children.Add(names);
 
-        UIElement LinkRow(string icon, string label, string url)
+        // 只放图标，点一下打开链接；没填地址的显示成半透明、不能点
+        UIElement IconLink(string icon, string name, string url)
         {
-            var g = new Grid { Margin = new Thickness(0, 4, 0, 8) };
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var ic = Icons.Filled(icon, accent, 26);
-            ic.VerticalAlignment = VerticalAlignment.Center;
-            g.Children.Add(ic);
-            var right = new StackPanel { Margin = new Thickness(14, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            right.Children.Add(Ui.Text(label, 14));
-            if (string.IsNullOrWhiteSpace(url))
+            var set = !string.IsNullOrWhiteSpace(url);
+            var b = new Border
             {
-                right.Children.Add(Ui.Text(L.Tr("未设置", "未設定"), 12.5, "SubBrush"));
-            }
-            else
+                Width = 56,
+                Height = 56,
+                CornerRadius = new CornerRadius(14),
+                Margin = new Thickness(0, 0, 12, 0),
+                Background = Brushes.Transparent,
+                Child = Icons.Filled(icon, accent, 30),
+                ToolTip = name,
+                Cursor = set ? Cursors.Hand : Cursors.Arrow,
+            };
+            ((FrameworkElement)b.Child).HorizontalAlignment = HorizontalAlignment.Center;
+            ((FrameworkElement)b.Child).VerticalAlignment = VerticalAlignment.Center;
+            if (set)
             {
-                var l = Ui.Link(url, () => Ui.Open(url));
-                l.HorizontalAlignment = HorizontalAlignment.Left;
-                right.Children.Add(l);
+                b.MouseEnter += (_, _) => b.SetResourceReference(Border.BackgroundProperty, "HoverBrush");
+                b.MouseLeave += (_, _) => b.Background = Brushes.Transparent;
+                b.MouseLeftButtonUp += (_, _) => Ui.Open(url);
             }
-            Grid.SetColumn(right, 1);
-            g.Children.Add(right);
-            return g;
+            return b;
         }
 
-        var licenses = Path.Combine(AppContext.BaseDirectory, "Licenses");
         var copyright = Ui.Text($"© {DateTime.Now.Year} {AppConfig.Author}", 12.5, "SubBrush");
         copyright.HorizontalAlignment = HorizontalAlignment.Center;
         copyright.Margin = new Thickness(0, 10, 0, 0);
 
         return Page(L.Tr("关于", "關於"), null,
             head,
-            Ui.Section(L.Tr("联系", "聯絡"),
-                LinkRow(Icons.GitHub, "GitHub", AppConfig.GitHubUrl),
-                LinkRow(Icons.Telegram, "Telegram", AppConfig.TelegramUrl)),
+            Ui.Section(L.Tr("反馈", "回饋"),
+                Ui.Buttons(
+                    IconLink(Icons.GitHub, "GitHub", AppConfig.GitHubUrl),
+                    IconLink(Icons.Telegram, "Telegram", AppConfig.TelegramUrl))),
             Ui.Section(L.Tr("数据", "資料"),
-                Ui.Para(L.Tr("设置保存在 %APPDATA%\\MinguoCalendar，缓存（壁纸、锁屏图）在 %LOCALAPPDATA%\\MinguoCalendar。",
-                    "設定儲存在 %APPDATA%\\MinguoCalendar，快取（桌布、鎖定畫面圖）在 %LOCALAPPDATA%\\MinguoCalendar。")),
                 Ui.Buttons(
                     Ui.Btn(L.Tr("清空缓存", "清除快取"), () =>
                     {
@@ -1108,7 +1153,6 @@ public sealed class SettingsWindow : Window
                     }),
                     Ui.Btn(L.Tr("打开数据文件夹", "開啟資料資料夾"), () => Ui.Open(SettingsStore.Dir)),
                     Ui.Btn(L.Tr("恢复默认设置", "恢復預設設定"), ResetAll))),
-            Ui.Buttons(Ui.Link(L.Tr("字体与图标许可", "字型與圖示授權"), () => Ui.Open(Directory.Exists(licenses) ? licenses : AppContext.BaseDirectory))),
             copyright);
     }
 
@@ -1123,8 +1167,11 @@ public sealed class SettingsWindow : Window
         Theme.Apply();
         AutoStart.Sync();
         var widget = S.WidgetEnabled;
+        var sysWidget = S.SysWidgetEnabled;
         App.Instance.Widget?.Close();
         App.Instance.ShowWidget(widget);
+        App.Instance.SysWidget?.Close();
+        App.Instance.ShowSysWidget(sysWidget);
         App.Fire(async () =>
         {
             await Bing.RefreshAsync(true).ConfigureAwait(false);

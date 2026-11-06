@@ -33,6 +33,31 @@ public sealed class AppSettings
     public bool WidgetShowWeather { get; set; } = true;
     public bool WidgetShowQuote { get; set; } = true;
     public bool WidgetLocked { get; set; }
+    // ---------- 系统资源组件（独立的一个小组件，和时钟分开摆放） ----------
+    public bool SysWidgetEnabled { get; set; } = true;
+    public double SysWidgetX { get; set; } = double.NaN;
+    public double SysWidgetY { get; set; } = double.NaN;
+    public double SysWidgetWidth { get; set; } = 340;
+    public double SysWidgetHeight { get; set; } = 300;
+    public bool SysWidgetLocked { get; set; }
+    /// <summary>0 白字，1 深色字</summary>
+    public int SysWidgetTextStyle { get; set; }
+    /// <summary>资源组件透明度 0.1..1（可调成水印那样很淡）</summary>
+    public double SysWidgetOpacity { get; set; } = 0.95;
+    /// <summary>采样间隔（毫秒），连接多时可调快或调慢</summary>
+    public int SysInterval { get; set; } = 1500;
+    /// <summary>连接详情窗口的刷新间隔（毫秒）</summary>
+    public int ConnInterval { get; set; } = 1000;
+    /// <summary>系统资源里分别显示哪几项</summary>
+    public bool SysShowCpu { get; set; } = true;
+    public bool SysShowGpu { get; set; } = true;
+    public bool SysShowMem { get; set; } = true;
+    public bool SysShowDisk { get; set; } = true;
+    public bool SysShowDiskIo { get; set; } = true;
+    public bool SysShowTemp { get; set; } = true;
+    public bool SysShowNet { get; set; } = true;
+    public bool SysShowConns { get; set; } = true;
+    public bool SysShowUptime { get; set; } = true;
 
     // ---------- 壁纸（屏保、锁屏背景用） ----------
     /// <summary>0 主题渐变，1 自选图片，2 必应壁纸轮换</summary>
@@ -51,6 +76,8 @@ public sealed class AppSettings
     public DateTime LockImageSetAt { get; set; }
     /// <summary>锁屏图各块的位置（设计坐标 1600×900）：块名 → [右边缘 x, 上边缘 y]；没有的块用默认位置</summary>
     public Dictionary<string, double[]> LockLayout { get; set; } = new();
+    /// <summary>锁屏图日期写法：0 民国年 + 农历（不重复系统的公历月日，默认），1 完整民国日期</summary>
+    public int LockDateStyle { get; set; }
 
     // ---------- 屏幕保护程序 ----------
     public bool ScreensaverInstalled { get; set; }

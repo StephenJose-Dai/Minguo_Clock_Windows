@@ -137,8 +137,10 @@ internal sealed class Tray : IDisposable
         _menu.Items.Add(head);
         _menu.Items.Add(new WinForms.ToolStripSeparator());
         Item(L.Tr("打开设置", "開啟設定"), () => App.Instance.ShowSettings());
-        Item(s.WidgetEnabled ? L.Tr("隐藏桌面小组件", "隱藏桌面小工具") : L.Tr("显示桌面小组件", "顯示桌面小工具"),
+        Item(s.WidgetEnabled ? L.Tr("隐藏时钟组件", "隱藏時鐘組件") : L.Tr("显示时钟组件", "顯示時鐘組件"),
             () => App.Instance.ShowWidget(!SettingsStore.Current.WidgetEnabled));
+        Item(s.SysWidgetEnabled ? L.Tr("隐藏系统资源组件", "隱藏系統資源組件") : L.Tr("显示系统资源组件", "顯示系統資源組件"),
+            () => App.Instance.ShowSysWidget(!SettingsStore.Current.SysWidgetEnabled));
         Item(L.Tr("换一句名言", "換一句名言"), () => App.Fire(Quotes.NextAsync));
         if (s.WallpaperMode == 2) Item(L.Tr("换一张壁纸", "換一張桌布"), () => App.Fire(() => Bing.RotateAsync()));
         if (s.LockImageEnabled) Item(L.Tr("立即更新锁屏背景", "立即更新鎖定畫面背景"), () => App.Fire(() => LockImage.UpdateAsync()));

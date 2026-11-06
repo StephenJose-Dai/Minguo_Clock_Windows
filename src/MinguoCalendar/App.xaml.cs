@@ -33,6 +33,7 @@ public partial class App : Application
     public static App Instance => (App)Current;
 
     public WidgetWindow? Widget { get; private set; }
+    public SysWidgetWindow? SysWidget { get; private set; }
 
     public static bool IsScreenSaverProcess { get; private set; }
 
@@ -122,6 +123,7 @@ public partial class App : Application
 
         _tray = new Tray();
         if (SettingsStore.Current.WidgetEnabled) ShowWidget(true);
+        if (SettingsStore.Current.SysWidgetEnabled) ShowSysWidget(true);
         AutoStart.Sync();
         ScreenSaver.SyncCopy();
         Scheduler.Start();
@@ -237,6 +239,31 @@ public partial class App : Application
         {
             Widget?.Close();
             Widget = null;
+        }
+        _tray?.UpdateMenu();
+    }
+
+    public void ShowSysWidget(bool show)
+    {
+        var s = SettingsStore.Current;
+        if (s.SysWidgetEnabled != show)
+        {
+            s.SysWidgetEnabled = show;
+            SettingsStore.Save();
+        }
+        if (show)
+        {
+            if (SysWidget == null)
+            {
+                SysWidget = new SysWidgetWindow();
+                SysWidget.Closed += (_, _) => SysWidget = null;
+                SysWidget.Show();
+            }
+        }
+        else
+        {
+            SysWidget?.Close();
+            SysWidget = null;
         }
         _tray?.UpdateMenu();
     }

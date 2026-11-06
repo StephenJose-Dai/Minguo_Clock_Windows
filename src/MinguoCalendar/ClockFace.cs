@@ -394,8 +394,22 @@ internal sealed class ClockFace : Grid
             _seconds.Visibility = s.ShowSeconds ? Visibility.Visible : Visibility.Collapsed;
         }
         // 系统锁屏已经显示“11月6日，星期五”，锁屏图只写民国日期，不重复星期
-        _date.Text = Roc.DateLine(now, style) + (_kind == Kind.LockImage ? "" : "  " + Roc.Weekday(now));
-        _lunar.Text = Roc.LunarLine(now, style);
+        if (_kind == Kind.LockImage && s.LockDateStyle == 0)
+        {
+            // 系统锁屏已经显示“11月6日，星期五”：这里写“民国115年 · 丙午马年”+“农历九月廿八”，不重复公历月日
+            var lunar = Roc.LunarLine(now, style);         // 农历丙午马年 九月廿八
+            var sp = lunar.IndexOf(' ');
+            var head = sp > 2 ? lunar[2..sp] : "";          // 丙午马年
+            var prefix = sp > 2 ? lunar[..2] : "";          // 农历
+            _date.Text = Roc.YearText(now.Year, style) + (head.Length > 0 ? " · " + head : "");
+            _lunar.Text = sp > 0 ? prefix + lunar[(sp + 1)..] : lunar;
+        }
+        else
+        {
+            // 屏保、预览：完整日期 + 星期；锁屏图选“完整民国日期”时不加星期（系统已显示）
+            _date.Text = Roc.DateLine(now, style) + (_kind == Kind.LockImage ? "" : "  " + Roc.Weekday(now));
+            _lunar.Text = Roc.LunarLine(now, style);
+        }
 
         var w = s.WeatherEnabled ? WeatherService.Current : null;
         _weatherRow.Children.Clear();

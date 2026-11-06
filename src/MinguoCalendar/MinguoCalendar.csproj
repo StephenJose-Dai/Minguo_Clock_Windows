@@ -28,6 +28,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Minguo.Core\Minguo.Core.csproj" />
+    <!-- 读取主板温度（WMI MSAcpi_ThermalZoneTemperature） -->
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <!-- 读取显卡使用率（GPU Engine 性能计数器） -->
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.0" />
+    <!-- 每个进程的网络流量（ETW 内核网络事件，需要管理员） -->
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.9" />
   </ItemGroup>
 
   <ItemGroup>
