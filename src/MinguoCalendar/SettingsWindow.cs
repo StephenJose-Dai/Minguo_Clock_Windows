@@ -425,6 +425,23 @@ public sealed class SettingsWindow : Window
     {
         _lockStatus = Status(LockImage.LastMessage.Length > 0 ? LockImage.LastMessage
             : S.LockImageSetAt == default ? "" : L.Tr("上次更新：", "上次更新：") + Ago(S.LockImageSetAt));
+
+        // 排版编辑：和锁屏图同一个画面，每一块都能按住拖动
+        var editor = new ClockFace(ClockFace.Kind.LockImage, editable: true);
+        _preview = editor;
+        editor.LayoutEdited += () =>
+        {
+            Save();
+            if (_lockStatus != null) _lockStatus.Text = L.Tr("排版已保存，点“立即更新”应用到锁屏", "排版已儲存，點「立即更新」套用到鎖定畫面");
+        };
+        var host = new Border { Child = editor, Margin = new Thickness(0, 0, 0, 10) };
+        host.SizeChanged += (_, e) =>
+        {
+            var h = e.NewSize.Width * 9 / 16;
+            if (Math.Abs(host.Height - h) > 0.5) host.Height = h;
+            host.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, h), 18, 18);
+        };
+
         return Page(L.Tr("锁屏背景", "鎖定畫面背景"), null,
             Ui.Section(L.Tr("锁屏背景", "鎖定畫面背景"),
                 Ui.SwitchRow(L.Tr("自动更新锁屏背景", "自動更新鎖定畫面背景"),
@@ -434,13 +451,25 @@ public sealed class SettingsWindow : Window
                     Ui.Btn(L.Tr("立即更新", "立即更新"), UpdateLockImage, accent: true),
                     Ui.Btn(L.Tr("打开系统锁屏设置", "開啟系統鎖定畫面設定"), LockImage.OpenSystemSettings)),
                 _lockStatus),
+            Ui.Section(L.Tr("排版", "排版"),
+                Ui.Para(L.Tr("按住日期、农历、天气、名言、签名任意一块拖到想要的位置，松手自动保存。白框是系统时间日期的位置，建议避开。",
+                    "按住日期、農曆、天氣、名言、簽名任意一塊拖到想要的位置，放開自動儲存。白框是系統時間日期的位置，建議避開。")),
+                host,
+                Ui.Buttons(
+                    Ui.Btn(L.Tr("应用到锁屏", "套用到鎖定畫面"), UpdateLockImage, accent: true),
+                    Ui.Btn(L.Tr("恢复默认排版", "恢復預設排版"), () =>
+                    {
+                        S.LockLayout.Clear();
+                        Save();
+                        BuildPage();
+                    }))),
             Ui.Section(L.Tr("说明", "說明"),
                 Ui.Para(L.Tr(
-                    "Windows 不允许第三方程序替换锁屏界面本身：锁屏上的时间、密码 / PIN 输入框都由系统显示，程序只能设置锁屏图片。所以这里把民国日期等内容画进图片里，放在画面右侧，避开系统时钟（Windows 10 在左下角，Windows 11 在上方正中）。",
-                    "Windows 不允許第三方程式取代鎖定畫面本身：鎖定畫面上的時間、密碼 / PIN 輸入框都由系統顯示，程式只能設定鎖定畫面圖片。所以這裡把民國日期等內容畫進圖片裡，放在畫面右側，避開系統時鐘（Windows 10 在左下角，Windows 11 在上方正中）。")),
+                    "锁屏上的时间、星期由 Windows 自己显示，所以图片里只放民国日期等内容，不重复显示星期。",
+                    "鎖定畫面上的時間、星期由 Windows 自己顯示，所以圖片裡只放民國日期等內容，不重複顯示星期。")),
                 Ui.Para(L.Tr(
-                    "如果锁屏没有变化：打开系统锁屏设置，把“个性化锁屏界面”从“Windows 聚焦”改成“图片”。锁屏图片里的时间不会走动，所以图片里只放日期，不放时间。",
-                    "如果鎖定畫面沒有變化：開啟系統鎖定畫面設定，把「個人化鎖定畫面」從「Windows 焦點」改成「圖片」。鎖定畫面圖片裡的時間不會走動，所以圖片裡只放日期，不放時間。"))));
+                    "如果锁屏没有变化：打开系统锁屏设置，把“个性化锁屏界面”从“Windows 聚焦”改成“图片”。",
+                    "如果鎖定畫面沒有變化：開啟系統鎖定畫面設定，把「個人化鎖定畫面」從「Windows 焦點」改成「圖片」。"))));
     }
 
     // ================= 屏幕保护 =================
@@ -592,6 +621,14 @@ public sealed class SettingsWindow : Window
         var apiStatus = Status(ApiStatusText(own), own ? "GoodBrush" : "SubBrush");
         var testResult = Status("");
 
+        var deniedHint = new StackPanel { Visibility = Visibility.Collapsed };
+        deniedHint.Children.Add(Status(L.Tr(
+            "没拿到系统定位，现在只是按网络大致定位（只准到城市，可能偏差较大）。请打开 Windows 定位设置，确认“位置服务”已打开，并把页面拉到最下面，打开“允许桌面应用访问你的位置”（本程序不会单独出现在应用列表里）。打开后点“立即定位”。",
+            "沒拿到系統定位，現在只是按網路大致定位（只準到城市，可能偏差較大）。請開啟 Windows 定位設定，確認「定位服務」已開啟，並把頁面拉到最下面，開啟「允許桌面應用程式存取您的位置」（本程式不會單獨出現在應用程式清單裡）。開啟後點「立即定位」。"), "WarnBrush"));
+        deniedHint.Children.Add(Ui.Buttons(Ui.Btn(L.Tr("打开定位设置", "開啟定位設定"), () => Ui.Open("ms-settings:privacy-location"))));
+        if (S.AutoLocate && S.LocSource == "ip") deniedHint.Visibility = Visibility.Visible;
+        _ = ShowIfDenied(deniedHint);
+
         var locating = Status("");
         var locateBtn = Ui.Btn(L.Tr("立即定位", "立即定位"), () => { }, accent: true);
         locateBtn.Click += async (_, _) =>
@@ -609,7 +646,8 @@ public sealed class SettingsWindow : Window
                 }
                 else
                 {
-                    locating.Text = L.Tr("已定位：", "已定位：") + name;
+                    locating.Text = L.Tr("已定位：", "已定位：") + name + "（" + Location.SourceLabel(S.LocSource) + "）";
+                    deniedHint.Visibility = S.LocSource == "ip" ? Visibility.Visible : Visibility.Collapsed;
                     await Task.Run(() => WeatherService.RefreshAsync());
                 }
             }
@@ -623,10 +661,6 @@ public sealed class SettingsWindow : Window
             }
         };
 
-        var deniedHint = new StackPanel { Visibility = Visibility.Collapsed };
-        deniedHint.Children.Add(Status(L.Tr("系统定位已关闭，只能按网络大致定位。打开后更准确：", "系統定位已關閉，只能按網路大致定位。開啟後更準確："), "WarnBrush"));
-        deniedHint.Children.Add(Ui.Buttons(Ui.Btn(L.Tr("打开定位设置", "開啟定位設定"), () => Ui.Open("ms-settings:privacy-location"))));
-        _ = ShowIfDenied(deniedHint);
 
         var testBtn = Ui.Btn(L.Tr("测试", "測試"), () => { });
         testBtn.Click += async (_, _) =>
@@ -669,7 +703,7 @@ public sealed class SettingsWindow : Window
                 })),
             Ui.Section(L.Tr("位置", "位置"),
                 _locationHost,
-                Ui.Buttons(locateBtn, Ui.Btn(L.Tr("搜索城市…", "搜尋城市…"), SearchCity)),
+                Ui.Buttons(locateBtn, Ui.Btn(L.Tr("选择区县…", "選擇區縣…"), PickDistrict), Ui.Btn(L.Tr("搜索城市…", "搜尋城市…"), SearchCity)),
                 locating,
                 deniedHint),
             Ui.Section(L.Tr("当前天气", "目前天氣"),
@@ -804,6 +838,94 @@ public sealed class SettingsWindow : Window
             p.Children.Add(days);
         }
         return p;
+    }
+
+    /// <summary>手动选择区县（省 → 市 → 区县，离线表，大陆和港澳）。选好后关闭自动定位</summary>
+    private void PickDistrict()
+    {
+        var dlg = new Window
+        {
+            Owner = this,
+            Title = L.Tr("选择区县", "選擇區縣"),
+            Width = 720,
+            Height = 560,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+        };
+        dlg.SetResourceReference(BackgroundProperty, "PageBrush");
+        dlg.SetResourceReference(TextElement.FontFamilyProperty, "UiFont");
+        dlg.SourceInitialized += (_, _) => Theme.ApplyTitleBar(dlg);
+
+        var root = new DockPanel { Margin = new Thickness(20) };
+        var hint = Ui.Para(L.Tr("依次点选省、市、区县，点区县后立即生效。", "依序點選省、市、區縣，點區縣後立即生效。"));
+        DockPanel.SetDock(hint, Dock.Top);
+        root.Children.Add(hint);
+        var grid = new Grid();
+        for (var i = 0; i < 3; i++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var cols = new StackPanel[3];
+        for (var i = 0; i < 3; i++)
+        {
+            cols[i] = new StackPanel { Margin = new Thickness(0, 0, 8, 0) };
+            var card = new Border { CornerRadius = new CornerRadius(14), Padding = new Thickness(8), Margin = new Thickness(0, 0, i < 2 ? 10 : 0, 0) };
+            card.SetResourceReference(Border.BackgroundProperty, "CardBrush");
+            card.Child = new ScrollViewer { Content = cols[i], VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            Grid.SetColumn(card, i);
+            grid.Children.Add(card);
+        }
+        root.Children.Add(grid);
+        dlg.Content = root;
+
+        RadioButton Item(string text, string group, bool on, Action pick)
+        {
+            var r = new RadioButton { Content = text, GroupName = group, IsChecked = on };
+            r.SetResourceReference(StyleProperty, "NavItem");
+            r.Checked += (_, _) => pick();
+            return r;
+        }
+
+        void ShowDistricts(string prov, string city)
+        {
+            cols[2].Children.Clear();
+            foreach (var d in Geo.Districts(prov, city))
+            {
+                var district = d;
+                cols[2].Children.Add(Item(L.Zh(d.Name), "d", false, () =>
+                {
+                    S.AutoLocate = false;
+                    WeatherService.SetLocation(district.Place.Label, district.Lat, district.Lon, district.Place);
+                    S.LocSource = "manual";
+                    S.LocatedAt = DateTime.Now;
+                    S.WeatherCache = null;
+                    Save();
+                    App.Fire(() => WeatherService.RefreshAsync());
+                    dlg.Close();
+                    BuildPage();
+                }));
+            }
+        }
+
+        void ShowCities(string prov, string? select)
+        {
+            cols[1].Children.Clear();
+            cols[2].Children.Clear();
+            foreach (var c in Geo.Cities(prov))
+            {
+                var city = c;
+                var on = c == select;
+                cols[1].Children.Add(Item(L.Zh(c), "c", on, () => ShowDistricts(prov, city)));
+                if (on) ShowDistricts(prov, city);
+            }
+        }
+
+        foreach (var p in Geo.Provinces())
+        {
+            var prov = p;
+            var on = p == S.PlaceProvince;
+            cols[0].Children.Add(Item(L.Zh(p), "p", on, () => ShowCities(prov, null)));
+            if (on) ShowCities(prov, S.PlaceCity);
+        }
+        dlg.ShowDialog();
     }
 
     /// <summary>搜索城市（手动选择后关闭自动定位）</summary>

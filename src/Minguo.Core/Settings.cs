@@ -49,6 +49,8 @@ public sealed class AppSettings
     // ---------- 锁屏背景 ----------
     public bool LockImageEnabled { get; set; }
     public DateTime LockImageSetAt { get; set; }
+    /// <summary>锁屏图各块的位置（设计坐标 1600×900）：块名 → [右边缘 x, 上边缘 y]；没有的块用默认位置</summary>
+    public Dictionary<string, double[]> LockLayout { get; set; } = new();
 
     // ---------- 屏幕保护程序 ----------
     public bool ScreensaverInstalled { get; set; }

@@ -149,6 +149,11 @@ public static partial class WeatherService
             SetLocation(place?.Label ?? s.CityName, l.Lat, l.Lon, place);
             s.LocSource = l.Source;
         }
+        else if (s.HasLocation && s.LocSource is "gps" or "wifi" or "cell" or "system")
+        {
+            // 这次系统定位没拿到，但之前有系统定位结果：继续用之前的，不用不准的网络 IP 覆盖
+            return s.CityName;
+        }
         else
         {
             var ip = await Geo.IpFallbackAsync().ConfigureAwait(false);

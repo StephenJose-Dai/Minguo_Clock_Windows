@@ -90,6 +90,24 @@ public static class Geo
         return new Place(CountryOf(best.Province), best.Province, best.City, best.District);
     }
 
+    // ---------------- 手动选择区县（离线表，不用联网） ----------------
+
+    public sealed record District(string Province, string City, string Name, double Lat, double Lon)
+    {
+        public Place Place => new(CountryOf(Province), Province, City, Name);
+    }
+
+    /// <summary>省份列表（按表中顺序：拼音排序）</summary>
+    public static List<string> Provinces() =>
+        Table().Select(r => r.Province).Distinct().Where(p => !p.StartsWith("台湾", StringComparison.Ordinal)).ToList();
+
+    public static List<string> Cities(string province) =>
+        Table().Where(r => r.Province == province).Select(r => r.City).Distinct().ToList();
+
+    public static List<District> Districts(string province, string city) =>
+        Table().Where(r => r.Province == province && r.City == city)
+            .Select(r => new District(r.Province, r.City, r.District, r.Lat, r.Lon)).ToList();
+
     /// <summary>上次地名来源：api / offline / bigdatacloud / ip</summary>
     public static string LastSource { get; private set; } = "";
 
